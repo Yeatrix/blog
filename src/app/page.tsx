@@ -1,7 +1,7 @@
 export default function HomePage() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-4xl font-bold text-ash-brown"></h1>
+    <main className="flex vh items-center justify-center">
+      <h1 className="text-7xl font-bold text-cream pt-[130px]">LAKSHYA KUMAR</h1>
     </main>
   );
 }

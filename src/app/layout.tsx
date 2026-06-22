@@ -18,7 +18,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-cream font-sans text-ash-brown antialiased">
+      <body
+        className="min-h-screen bg-cream font-sans text-ash-brown antialiased"
+        style={{
+          backgroundImage: "url('/background.png')",
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'center',
+        }}
+      >
         <Navbar />
         {children}
       </body>
