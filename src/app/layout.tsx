@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import Navbar from '@/components/Navbar';
-
 
 const inter = Inter({
   subsets: ['latin'],
@@ -28,6 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         <Navbar />
         {children}
+        <Script
+          type="module"
+          src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
