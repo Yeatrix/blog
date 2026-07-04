@@ -30,7 +30,7 @@ export default function BlogCarousel({ blogs }: Props) {
             rotateAmplitude={12}
             scaleOnHover={1.05}
             showMobileWarning={false}
-            showTooltip={true}
+            showTooltip={false}
             displayOverlayContent={true}
             overlayContent={
               <div className="flex flex-col justify-end h-full p-5">
