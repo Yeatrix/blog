@@ -7,24 +7,24 @@ export default function Navbar() {
 
             {/* Logo — left */}
             <div className="w-40 flex-shrink-0">
-              <Link href="/" className="text-base font-bold tracking-tight text-ash-brown transition-colors hover:text-cream">
+              <Link href="/" className="text-base font-bold tracking-tight text-cream transition-colors hover:text-olive">
                 lakshyakumar
               </Link>
             </div>
 
             {/* Links — center */}
             <div className="flex flex-1 items-center justify-center gap-8">
-              <Link href="/" className="text-sm text-ash-brown/60 transition-colors hover:text-cream">Home</Link>
-              <Link href="/about" className="text-sm text-ash-brown/60 transition-colors hover:text-cream">About</Link>
-              <Link href="/blog" className="text-sm text-ash-brown/60 transition-colors hover:text-cream">Blog</Link>
-              <Link href="/work" className="text-sm text-ash-brown/60 transition-colors hover:text-cream">Work</Link>
+              <Link href="/" className="text-sm text-cream/50 transition-colors hover:text-cream">Home</Link>
+              <Link href="/about" className="text-sm text-cream/50 transition-colors hover:text-cream">About</Link>
+              <Link href="/blog" className="text-sm text-cream/50 transition-colors hover:text-cream">Blog</Link>
+              <Link href="/work" className="text-sm text-cream/50 transition-colors hover:text-cream">Work</Link>
             </div>
 
             {/* CTA — right */}
             <div className="w-40 flex flex-shrink-0 justify-end">
               <Link
                 href="/contact"
-                className="rounded-full border border-ash-brown/40 px-4 py-1.5 text-sm text-ash-brown transition-all hover:border-ash-brown hover:bg-ash-brown hover:text-cream"
+                className="rounded-full border border-cream/30 px-4 py-1.5 text-sm text-cream transition-all hover:border-cream hover:bg-cream hover:text-black"
               >
                 Get in touch
               </Link>
