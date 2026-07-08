@@ -11,6 +11,10 @@ const PLAYER_SIZE = 1.5; // desired height of the model in world units
 
 export default function Scene() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const joyBaseRef = useRef<HTMLDivElement>(null);
+  const joyKnobRef = useRef<HTMLDivElement>(null);
+  // joystick output, read by the animation loop: x = turn, y = forward/back, each in [-1, 1]
+  const joyRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -134,27 +138,63 @@ export default function Scene() {
     const DIST_MIN = 3;
     const DIST_MAX = 25;
 
-    let dragging = false;
+    // Active pointers on the canvas: 1 = orbit drag, 2 = pinch zoom
+    const pointers = new Map<number, { x: number; y: number }>();
     let lastX = 0, lastY = 0;
+    let pinchStartDist = 0;
+    let pinchStartCamDist = 0;
+
+    // stop the browser from scrolling/zooming the page while touching the scene
+    renderer.domElement.style.touchAction = 'none';
 
     const onPointerDown = (e: PointerEvent) => {
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       renderer.domElement.setPointerCapture(e.pointerId);
+      if (pointers.size === 1) {
+        lastX = e.clientX;
+        lastY = e.clientY;
+      } else if (pointers.size === 2) {
+        const [p1, p2] = [...pointers.values()];
+        pinchStartDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        pinchStartCamDist = camDist;
+      }
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!dragging) return;
-      const dx = e.clientX - lastX;
-      const dy = e.clientY - lastY;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      camYaw -= dx * 0.005;
-      camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.005, PITCH_MIN, PITCH_MAX);
+      const p = pointers.get(e.pointerId);
+      if (!p) return;
+      p.x = e.clientX;
+      p.y = e.clientY;
+
+      if (pointers.size === 1) {
+        // orbit
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        camYaw -= dx * 0.005;
+        camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.005, PITCH_MIN, PITCH_MAX);
+      } else if (pointers.size === 2) {
+        // pinch zoom
+        const [p1, p2] = [...pointers.values()];
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (dist > 0) {
+          camDist = THREE.MathUtils.clamp(
+            pinchStartCamDist * (pinchStartDist / dist),
+            DIST_MIN,
+            DIST_MAX
+          );
+        }
+      }
     };
     const onPointerUp = (e: PointerEvent) => {
-      dragging = false;
+      pointers.delete(e.pointerId);
       renderer.domElement.releasePointerCapture(e.pointerId);
+      // returning from pinch to one finger: reset drag anchor to avoid a jump
+      if (pointers.size === 1) {
+        const [p] = [...pointers.values()];
+        lastX = p.x;
+        lastY = p.y;
+      }
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -163,6 +203,7 @@ export default function Scene() {
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
     // --- Resize handling ---
@@ -181,13 +222,19 @@ export default function Scene() {
       rafId = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
 
-      // A/D or ←/→ turn the box, W/S or ↑/↓ move along the direction it faces
-      if (keys['a'] || keys['arrowleft']) box.rotation.y += TURN_SPEED * dt;
-      if (keys['d'] || keys['arrowright']) box.rotation.y -= TURN_SPEED * dt;
+      // A/D or ←/→ turn the box, W/S or ↑/↓ move along the direction it faces.
+      // The joystick contributes analog values in the same ranges.
+      let turn = 0;
+      if (keys['a'] || keys['arrowleft']) turn += 1;
+      if (keys['d'] || keys['arrowright']) turn -= 1;
+      turn -= joyRef.current.x; // push right = turn right
+      box.rotation.y += THREE.MathUtils.clamp(turn, -1, 1) * TURN_SPEED * dt;
 
       let move = 0;
       if (keys['w'] || keys['arrowup']) move += 1;
       if (keys['s'] || keys['arrowdown']) move -= 1;
+      move += joyRef.current.y; // push up = forward
+      move = THREE.MathUtils.clamp(move, -1, 1);
       if (move !== 0) {
         // forward is -Z rotated by the box's yaw
         box.position.x -= Math.sin(box.rotation.y) * move * SPEED * dt;
@@ -229,5 +276,81 @@ export default function Scene() {
     };
   }, []);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  // --- Joystick (touch devices only) ---
+  const JOY_TRAVEL = 40; // max knob offset in px
+
+  const moveKnob = (clientX: number, clientY: number) => {
+    const base = joyBaseRef.current;
+    const knob = joyKnobRef.current;
+    if (!base || !knob) return;
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = clientX - cx;
+    let dy = clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > JOY_TRAVEL) {
+      dx = (dx / len) * JOY_TRAVEL;
+      dy = (dy / len) * JOY_TRAVEL;
+    }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    joyRef.current = { x: dx / JOY_TRAVEL, y: -dy / JOY_TRAVEL };
+  };
+
+  const resetKnob = () => {
+    if (joyKnobRef.current) joyKnobRef.current.style.transform = 'translate(0px, 0px)';
+    joyRef.current = { x: 0, y: 0 };
+  };
+
+  return (
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <style>{`
+        .joystick { display: none; }
+        @media (pointer: coarse) {
+          .joystick { display: flex; }
+        }
+      `}</style>
+      <div
+        ref={joyBaseRef}
+        className="joystick"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          moveKnob(e.clientX, e.clientY);
+        }}
+        onPointerMove={(e) => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) moveKnob(e.clientX, e.clientY);
+        }}
+        onPointerUp={resetKnob}
+        onPointerCancel={resetKnob}
+        style={{
+          position: 'absolute',
+          left: 28,
+          bottom: 28,
+          width: 120,
+          height: 120,
+          borderRadius: '50%',
+          background: 'rgba(240, 234, 210, 0.08)',
+          border: '1.5px solid rgba(240, 234, 210, 0.25)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          touchAction: 'none',
+          zIndex: 10,
+          userSelect: 'none',
+        }}
+      >
+        <div
+          ref={joyKnobRef}
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: '50%',
+            background: 'rgba(240, 234, 210, 0.35)',
+            border: '1.5px solid rgba(240, 234, 210, 0.5)',
+            pointerEvents: 'none',
+            transition: 'transform 0.05s linear',
+          }}
+        />
+      </div>
+    </div>
+  );
 }
