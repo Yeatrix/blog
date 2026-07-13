@@ -3,11 +3,23 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-// Path to your player model (put the file in public/models/).
-// Set to null to use the plain cube instead.
+// Paths to your models (put the files in public/models/).
+// Set to null to use the plain cube / dark plane instead.
 const PLAYER_MODEL_URL: string | null = '/models/player.gltf';
 const PLAYER_SIZE = 1.5; // desired height of the model in world units
+
+// Procedural anime grass (no model files)
+const GRASS_RADIUS = 45;     // how far the grass field extends from the center
+const GRASS_COUNT = 40000;   // number of blades (one draw call regardless)
+const GRASS_HEIGHT = 1.0;    // average blade height in world units
+const COLOR_GROUND = 0x2a5c1b; // soil/ground plane under the blades
+const COLOR_BLADE_BASE = 0x2d6a1e; // blade color at the root
+const COLOR_BLADE_TIP = 0x8fd94e;  // blade color at the tip (the anime "glow")
+
+const HUT_MODEL_URL: string | null = '/models/177-medieval-hut.glb';
+const HUT_SIZE = 12; // desired height of the hut in world units
 
 export default function Scene() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,12 +38,19 @@ export default function Scene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
     // --- Scene & Camera ---
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     scene.fog = new THREE.Fog(0x000000, 30, 80);
+
+    // Environment map: PBR materials (metallic/rough surfaces in GLB models)
+    // reflect their surroundings — without this they render dark grey.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
     const camera = new THREE.PerspectiveCamera(
       60,
@@ -54,25 +73,172 @@ export default function Scene() {
     sun.shadow.camera.bottom = -30;
     scene.add(sun);
 
-    // --- Floor ---
+    // --- Grass texture (shared by the ground plane and the blades) ---
+    const texLoader = new THREE.TextureLoader();
+
+    const groundTex = texLoader.load('/textures/grass.jpg');
+    groundTex.wrapS = THREE.RepeatWrapping;
+    groundTex.wrapT = THREE.RepeatWrapping;
+    groundTex.repeat.set(12, 12); // tiling density on the ground
+    groundTex.colorSpace = THREE.SRGBColorSpace;
+
+    const fieldTex = texLoader.load('/textures/grass.jpg');
+    fieldTex.colorSpace = THREE.SRGBColorSpace;
+
+    // --- Ground plane (textured soil under the blades) ---
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 })
+      new THREE.CircleGeometry(GRASS_RADIUS + 5, 48),
+      new THREE.MeshLambertMaterial({ map: groundTex, color: 0xbbbbbb })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Grid lines so movement is visible
-    const grid = new THREE.GridHelper(100, 100, 0x333333, 0x1c1c1c);
-    (grid.material as THREE.Material).transparent = true;
-    (grid.material as THREE.Material).opacity = 0.6;
-    scene.add(grid);
+    // --- Anime grass: instanced blades with a gradient + wind shader ---
+    // One tapered blade, instanced GRASS_COUNT times = a single draw call.
+    const blade = new THREE.PlaneGeometry(0.14, GRASS_HEIGHT, 1, 3);
+    blade.translate(0, GRASS_HEIGHT / 2, 0); // root at y = 0
+
+    const grassGeo = new THREE.InstancedBufferGeometry();
+    grassGeo.index = blade.index;
+    grassGeo.setAttribute('position', blade.getAttribute('position'));
+    grassGeo.setAttribute('uv', blade.getAttribute('uv'));
+    grassGeo.instanceCount = GRASS_COUNT;
+
+    const offsets = new Float32Array(GRASS_COUNT * 3);
+    const angles = new Float32Array(GRASS_COUNT);
+    const scales = new Float32Array(GRASS_COUNT);
+    const tints = new Float32Array(GRASS_COUNT);
+    for (let i = 0; i < GRASS_COUNT; i++) {
+      // random point in a circle (sqrt for even density)
+      const r = Math.sqrt(Math.random()) * GRASS_RADIUS;
+      const a = Math.random() * Math.PI * 2;
+      offsets[i * 3] = Math.cos(a) * r;
+      offsets[i * 3 + 1] = 0;
+      offsets[i * 3 + 2] = Math.sin(a) * r;
+      angles[i] = Math.random() * Math.PI * 2;
+      scales[i] = 0.6 + Math.random() * 0.8;
+      tints[i] = Math.random();
+    }
+    grassGeo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 3));
+    grassGeo.setAttribute('aAngle', new THREE.InstancedBufferAttribute(angles, 1));
+    grassGeo.setAttribute('aScale', new THREE.InstancedBufferAttribute(scales, 1));
+    grassGeo.setAttribute('aTint', new THREE.InstancedBufferAttribute(tints, 1));
+
+    const grassMat = new THREE.ShaderMaterial({
+      side: THREE.DoubleSide,
+      fog: true,
+      uniforms: {
+        uTime: { value: 0 },
+        uBase: { value: new THREE.Color(COLOR_BLADE_BASE) },
+        uTip: { value: new THREE.Color(COLOR_BLADE_TIP) },
+        uMap: { value: fieldTex },
+        uRadius: { value: GRASS_RADIUS },
+        ...THREE.UniformsLib.fog,
+      },
+      vertexShader: /* glsl */ `
+        attribute vec3 aOffset;
+        attribute float aAngle;
+        attribute float aScale;
+        attribute float aTint;
+        uniform float uTime;
+        uniform float uRadius;
+        varying float vH;
+        varying float vTint;
+        varying vec2 vFieldUv;
+        #include <fog_pars_vertex>
+
+        void main() {
+          vH = uv.y;
+          vTint = aTint;
+          // where this blade stands in the field, mapped to 0..1 texture coords
+          vFieldUv = (aOffset.xz / uRadius) * 0.5 + 0.5;
+
+          vec3 pos = position;
+          pos.x *= 1.0 - 0.85 * uv.y;   // taper toward the tip
+          pos *= aScale;                 // per-blade size variation
+
+          // rotate the blade around Y so they don't all face one way
+          float c = cos(aAngle), s = sin(aAngle);
+          pos = vec3(c * pos.x + s * pos.z, pos.y, -s * pos.x + c * pos.z);
+
+          // wind: tips sway, roots stay planted
+          float sway = sin(uTime * 1.6 + aOffset.x * 0.8 + aOffset.z * 0.6)
+                     + 0.5 * sin(uTime * 3.1 + aOffset.z);
+          float bend = sway * 0.12 * vH * vH;
+          pos.x += bend;
+          pos.z += bend * 0.6;
+
+          pos += aOffset;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uBase;
+        uniform vec3 uTip;
+        uniform sampler2D uMap;
+        varying float vH;
+        varying float vTint;
+        varying vec2 vFieldUv;
+        #include <fog_pars_fragment>
+
+        void main() {
+          vec3 col = mix(uBase, uTip, vH);      // root → tip gradient
+          // paint the field with the image: each blade picks up the color
+          // of the texture at its position (brighter toward the tip)
+          vec3 fieldCol = texture2D(uMap, vFieldUv).rgb;
+          col = mix(col, fieldCol * (0.6 + 0.6 * vH), 0.5);
+          col *= 0.88 + vTint * 0.24;           // subtle per-blade variation
+          gl_FragColor = vec4(col, 1.0);
+          #include <fog_fragment>
+        }
+      `,
+    });
+
+    const grass = new THREE.Mesh(grassGeo, grassMat);
+    grass.frustumCulled = false; // instances spread beyond the base geometry's bounds
+    scene.add(grass);
+
+    // --- Hut (scene centerpiece) ---
+    if (HUT_MODEL_URL) {
+      new GLTFLoader().load(
+        HUT_MODEL_URL,
+        (gltf) => {
+          const hut = gltf.scene;
+
+          // normalize: scale to HUT_SIZE tall, centered at origin, base on the floor
+          const bounds = new THREE.Box3().setFromObject(hut);
+          const size = bounds.getSize(new THREE.Vector3());
+          const scale = HUT_SIZE / size.y;
+          hut.scale.setScalar(scale);
+
+          bounds.setFromObject(hut);
+          const center = bounds.getCenter(new THREE.Vector3());
+          hut.position.x -= center.x;
+          hut.position.z -= center.z;
+          hut.position.y -= bounds.min.y;
+
+          hut.traverse((o) => {
+            if ((o as THREE.Mesh).isMesh) {
+              o.castShadow = true;
+              o.receiveShadow = true;
+            }
+          });
+
+          scene.add(hut);
+        },
+        undefined,
+        (err) => console.warn('Hut model failed to load:', err)
+      );
+    }
 
     // --- Player ---
     // The movement/camera code drives this group; the visual (cube or GLTF
     // model) lives inside it, so swapping visuals never touches the logic.
     const box = new THREE.Group();
+    box.position.z = 8; // spawn in front of the hut, not inside it
     scene.add(box);
 
     const cube = new THREE.Mesh(
@@ -221,6 +387,7 @@ export default function Scene() {
     const animate = () => {
       rafId = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
+      grassMat.uniforms.uTime.value += dt; // wind
 
       // A/D or ←/→ turn the box, W/S or ↑/↓ move along the direction it faces.
       // The joystick contributes analog values in the same ranges.
@@ -271,6 +438,7 @@ export default function Scene() {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('wheel', onWheel);
+      pmrem.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
