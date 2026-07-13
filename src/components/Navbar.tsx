@@ -1,36 +1,26 @@
 import Link from 'next/link';
 
+const linkStyle =
+  'text-[11px] uppercase tracking-[0.18em] text-cream/80 transition-colors hover:text-cream';
+
 export default function Navbar() {
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-sm">
-          <nav className="mx-auto flex h-16 max-w-6xl items-center px-6">
+    <header className="sticky top-0 z-50">
+      <nav className="flex h-16 items-center justify-between px-6">
+        {/* Pages — left corner */}
+        <div className="flex items-center gap-6">
+          <Link href="/work" className={linkStyle}>Work</Link>
+          <Link href="/blog" className={linkStyle}>Blog</Link>
+          <Link href="/about" className={linkStyle}>Hello</Link>
+        </div>
 
-            {/* Logo — left */}
-            <div className="w-40 flex-shrink-0">
-              <Link href="/" className="text-base font-bold tracking-tight text-cream transition-colors hover:text-olive">
-                lakshyakumar
-              </Link>
-            </div>
-
-            {/* Links — center */}
-            <div className="flex flex-1 items-center justify-center gap-8">
-              <Link href="/" className="text-sm text-cream/50 transition-colors hover:text-cream">Home</Link>
-              <Link href="/about" className="text-sm text-cream/50 transition-colors hover:text-cream">About</Link>
-              <Link href="/blog" className="text-sm text-cream/50 transition-colors hover:text-cream">Blog</Link>
-              <Link href="/work" className="text-sm text-cream/50 transition-colors hover:text-cream">Work</Link>
-            </div>
-
-            {/* CTA — right */}
-            <div className="w-40 flex flex-shrink-0 justify-end">
-              <Link
-                href="/contact"
-                className="rounded-full border border-cream/30 px-4 py-1.5 text-sm text-cream transition-all hover:border-cream hover:bg-cream hover:text-black"
-              >
-                Get in touch
-              </Link>
-            </div>
-
-          </nav>
-        </header>
+        {/* Socials / contact — right corner */}
+        <div className="flex items-center gap-6">
+          <a href="https://github.com/Yeatrix" target="_blank" rel="noreferrer" className={linkStyle}>GitHub</a>
+          <a href="https://www.linkedin.com/in/lakshya-kumar-5a205a258/" target="_blank" rel="noreferrer" className={linkStyle}>Lin</a>
+          <Link href="/contact" className={linkStyle}>Contact</Link>
+        </div>
+      </nav>
+    </header>
   );
 }

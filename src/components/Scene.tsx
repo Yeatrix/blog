@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 // Paths to your models (put the files in public/models/).
 // Set to null to use the plain cube / dark plane instead.
@@ -11,8 +12,9 @@ const PLAYER_MODEL_URL: string | null = '/models/player.gltf';
 const PLAYER_SIZE = 1.5; // desired height of the model in world units
 
 // Procedural anime grass (no model files)
-const GRASS_RADIUS = 45;     // how far the grass field extends from the center
-const GRASS_COUNT = 40000;   // number of blades (one draw call regardless)
+const GRASS_RADIUS = 60;     // how far the grass field extends from the center
+const PLAY_RADIUS = 30;      // how far the player can walk from the center
+const GRASS_COUNT = 150000;   // number of blades (one draw call regardless)
 const GRASS_HEIGHT = 1.0;    // average blade height in world units
 const COLOR_GROUND = 0x2a5c1b; // soil/ground plane under the blades
 const COLOR_BLADE_BASE = 0x2d6a1e; // blade color at the root
@@ -21,12 +23,16 @@ const COLOR_BLADE_TIP = 0x8fd94e;  // blade color at the tip (the anime "glow")
 const HUT_MODEL_URL: string | null = '/177-medieval-hut.glb';
 const HUT_SIZE = 12; // desired height of the hut in world units
 
-export default function Scene() {
+export default function Scene({ onFirstMove }: { onFirstMove?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const joyBaseRef = useRef<HTMLDivElement>(null);
   const joyKnobRef = useRef<HTMLDivElement>(null);
   // joystick output, read by the animation loop: x = turn, y = forward/back, each in [-1, 1]
   const joyRef = useRef({ x: 0, y: 0 });
+  // kept in a ref so the effect (and scene) never needs to re-run when the prop changes
+  const onFirstMoveRef = useRef(onFirstMove);
+  onFirstMoveRef.current = onFirstMove;
+  const hasMovedRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -45,12 +51,17 @@ export default function Scene() {
     // --- Scene & Camera ---
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.Fog(0x000000, 30, 80);
+    // fog wall must swallow the field edge from any reachable camera spot:
+    // worst case is player at PLAY_RADIUS looking outward → edge is
+    // (GRASS_RADIUS - PLAY_RADIUS + DIST_MAX) from the camera; keep far below that
+    // near→far is the fade band: keep it wide so the fog feels like
+    // atmosphere, not a wall. far must stay ≤ (GRASS_RADIUS - PLAY_RADIUS + DIST_MAX)
+    scene.fog = new THREE.Fog(0x000000, 14, 40);
 
     // Environment map: PBR materials (metallic/rough surfaces in GLB models)
     // reflect their surroundings — without this they render dark grey.
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // const pmrem = new THREE.PMREMGenerator(renderer);
+    // scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
     const camera = new THREE.PerspectiveCamera(
       60,
@@ -59,20 +70,96 @@ export default function Scene() {
       200
     );
 
+    // --- Starry sky: points on a huge dome, twinkling via shader ---
+    const STAR_COUNT = 3000;
+    const starPos = new Float32Array(STAR_COUNT * 3);
+    const starSizes = new Float32Array(STAR_COUNT);
+    const starPhases = new Float32Array(STAR_COUNT);
+    const starColors = new Float32Array(STAR_COUNT * 3);
+    const starPalette = [
+      new THREE.Color(0xffffff), // white (most stars)
+      new THREE.Color(0xffffff),
+      new THREE.Color(0xffffff),
+      new THREE.Color(0xbfd8ff), // blue-ish
+      new THREE.Color(0xffe9c4), // warm yellow
+    ];
+    const dir = new THREE.Vector3();
+    for (let i = 0; i < STAR_COUNT; i++) {
+      // random direction above the horizon, pushed to a dome inside camera.far
+      dir.set(Math.random() * 2 - 1, Math.random() * 0.9 + 0.05, Math.random() * 2 - 1)
+        .normalize()
+        .multiplyScalar(180);
+      starPos.set([dir.x, dir.y, dir.z], i * 3);
+      starSizes[i] = 1 + Math.random() * 2.2;      // pixel size
+      starPhases[i] = Math.random() * Math.PI * 2; // twinkle offset
+      const c = starPalette[Math.floor(Math.random() * starPalette.length)];
+      starColors.set([c.r, c.g, c.b], i * 3);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    starGeo.setAttribute('aSize', new THREE.BufferAttribute(starSizes, 1));
+    starGeo.setAttribute('aPhase', new THREE.BufferAttribute(starPhases, 1));
+    starGeo.setAttribute('aColor', new THREE.BufferAttribute(starColors, 3));
+
+    const starMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: /* glsl */ `
+        attribute float aSize;
+        attribute float aPhase;
+        attribute vec3 aColor;
+        uniform float uTime;
+        varying vec3 vColor;
+        varying float vTwinkle;
+
+        void main() {
+          vColor = aColor;
+          // each star pulses on its own rhythm
+          vTwinkle = 0.55 + 0.45 * sin(uTime * 1.5 + aPhase);
+          gl_PointSize = aSize * (0.75 + 0.25 * vTwinkle);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec3 vColor;
+        varying float vTwinkle;
+
+        void main() {
+          // round point with a soft edge instead of a square
+          float d = length(gl_PointCoord - 0.5);
+          if (d > 0.5) discard;
+          float glow = smoothstep(0.5, 0.0, d);
+          gl_FragColor = vec4(vColor, glow * vTwinkle);
+        }
+      `,
+    });
+
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
     // --- Lights ---
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambient);
+    // const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+    // scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-    sun.position.set(10, 20, 10);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -30;
-    sun.shadow.camera.right = 30;
-    sun.shadow.camera.top = 30;
-    sun.shadow.camera.bottom = -30;
-    scene.add(sun);
+    RectAreaLightUniformsLib.init(); // required once for RectAreaLight to render correctly
+    const areaLight = new THREE.RectAreaLight(0xffbda0, 5, 12, 12);
+    areaLight.position.set(-14, 18, 8);          // high, off to the side
+    areaLight.lookAt(0, HUT_SIZE / 2, 0);        // aim at the middle of the hut
+    scene.add(areaLight);
 
+    
+    const lampLight = new THREE.SpotLight(0xffd2af, 200);
+
+    lampLight.position.set(4, 5, 6);
+    lampLight.angle = Math.PI/2
+    lampLight.penumbra = 1;
+    lampLight.decay = 2;
+    lampLight.distance = 8;
+
+    lampLight.target.position.set(0, 0, 0);
+    scene.add(lampLight);
+    scene.add(lampLight.target);
     // --- Grass texture (shared by the ground plane and the blades) ---
     const texLoader = new THREE.TextureLoader();
 
@@ -218,7 +305,7 @@ export default function Scene() {
           const center = bounds.getCenter(new THREE.Vector3());
           hut.position.x -= center.x;
           hut.position.z -= center.z;
-          hut.position.y -= bounds.min.y;
+          hut.position.y -= bounds.min.y + 1;
 
           hut.traverse((o) => {
             if ((o as THREE.Mesh).isMesh) {
@@ -238,7 +325,7 @@ export default function Scene() {
     // The movement/camera code drives this group; the visual (cube or GLTF
     // model) lives inside it, so swapping visuals never touches the logic.
     const box = new THREE.Group();
-    box.position.z = 8; // spawn in front of the hut, not inside it
+    box.position.z = 20; // spawn in front of the hut, not inside it
     scene.add(box);
 
     const cube = new THREE.Mesh(
@@ -297,12 +384,12 @@ export default function Scene() {
     // --- Mouse orbit + zoom state ---
     // camYaw is an offset relative to the box's facing; camPitch is elevation angle
     let camYaw = 0;
-    let camPitch = 0.55;  // radians above horizontal
+    let camPitch = 0.36;  // radians above horizontal
     let camDist = 9;
-    const PITCH_MIN = 0.12; // keeps camera above the floor
+    const PITCH_MIN = 0; // keeps camera above the floor
     const PITCH_MAX = 1.45; // just short of straight overhead
     const DIST_MIN = 3;
-    const DIST_MAX = 25;
+    const DIST_MAX = 30; // capped so the camera can never see past the fog to the field edge
 
     // Active pointers on the canvas: 1 = orbit drag, 2 = pinch zoom
     const pointers = new Map<number, { x: number; y: number }>();
@@ -388,6 +475,7 @@ export default function Scene() {
       rafId = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
       grassMat.uniforms.uTime.value += dt; // wind
+      starMat.uniforms.uTime.value += dt;  // twinkle
 
       // A/D or ←/→ turn the box, W/S or ↑/↓ move along the direction it faces.
       // The joystick contributes analog values in the same ranges.
@@ -402,10 +490,25 @@ export default function Scene() {
       if (keys['s'] || keys['arrowdown']) move -= 1;
       move += joyRef.current.y; // push up = forward
       move = THREE.MathUtils.clamp(move, -1, 1);
+
+      // notify the page once, the first time the player moves or turns
+      if (!hasMovedRef.current && (move !== 0 || turn !== 0)) {
+        hasMovedRef.current = true;
+        onFirstMoveRef.current?.();
+      }
       if (move !== 0) {
         // forward is -Z rotated by the box's yaw
         box.position.x -= Math.sin(box.rotation.y) * move * SPEED * dt;
         box.position.z -= Math.cos(box.rotation.y) * move * SPEED * dt;
+
+        // invisible fence: keep the player well inside the field so the
+        // grass edge always stays hidden behind the fog
+        const distFromCenter = Math.hypot(box.position.x, box.position.z);
+        if (distFromCenter > PLAY_RADIUS) {
+          const k = PLAY_RADIUS / distFromCenter;
+          box.position.x *= k;
+          box.position.z *= k;
+        }
       }
 
       // camera orbits the box: behind its facing direction + user drag offset,
@@ -438,7 +541,7 @@ export default function Scene() {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('wheel', onWheel);
-      pmrem.dispose();
+      // pmrem.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
