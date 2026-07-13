@@ -18,7 +18,7 @@ const COLOR_GROUND = 0x2a5c1b; // soil/ground plane under the blades
 const COLOR_BLADE_BASE = 0x2d6a1e; // blade color at the root
 const COLOR_BLADE_TIP = 0x8fd94e;  // blade color at the tip (the anime "glow")
 
-const HUT_MODEL_URL: string | null = '/models/177-medieval-hut.glb';
+const HUT_MODEL_URL: string | null = '/177-medieval-hut.glb';
 const HUT_SIZE = 12; // desired height of the hut in world units
 
 export default function Scene() {
