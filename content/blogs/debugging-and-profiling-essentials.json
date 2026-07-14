@@ -1,8 +1,8 @@
 {
-  "title": "Beyond Print Statements: What I Learned Studying Debugging and Profiling",
+  "title": "yesss, i studied profiling and debugging",
   "slug": "debugging-and-profiling-essentials",
   "date": "2026-07-08",
-  "description": "Moving past manual dry-running. My takeaways from MIT's Missing Semester lecture on using logging, interactive debuggers, and CPU/memory profilers to optimize code.",
+  "description": "i didn't want to manually dry-run, so i studied. here are my takeaways from MIT's Missing Semester lecture on using logging, interactive debuggers, and CPU/memory profilers to optimize code.",
   "tags": ["dev", "debugging", "profiling", "python"],
   "coverImage": "/blogs/img1.jpg",
   "content": "Every software developer writes code that doesn't work as intended. While you can get away with dry-running small codebases by hand, large systems make manual tracing impossible. \n\nWe often default to scattering print statements everywhere to check variable states, but this quickly clutters the code and creates unreadable output. Moving up to logging is a massive improvement—it records events with structured severity levels (like info, warning, and critical) and supports color-coding for fast visual scanning. For deeper inspection, interactive tools like Python's `pdb` allow you to set precise breakpoints and step through the code line-by-line rather than guessing where it failed.\n\nLately, I've also shifted focus to profiling—measuring runtime, system/user time, and memory consumption to eliminate bottlenecks. CPU profilers generally fall into two categories: tracing profilers (which record every function call but introduce high overhead) and sampling profilers (which probe the program at intervals for statistical analysis). Tools like `perf`, line profilers, and memory profilers help identify resource hogs where inline operations could save memory copies.\n\nI dug into these concepts through MIT's 'Missing Semester' lecture and its hands-on exercises. Moving forward, my goal is to actively incorporate these automated frameworks into my daily projects to make troubleshooting and optimization second nature."
