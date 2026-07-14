@@ -1,9 +1,0 @@
-{
-  "title": "What I Learned Building With Next.js",
-  "slug": "learning-nextjs",
-  "date": "2026-06-28",
-  "description": "Lessons from building my personal site with Next.js 15 App Router — what surprised me and what I'd do differently.",
-  "tags": ["dev", "nextjs", "web"],
-  "coverImage": "",
-  "content": "I decided to build my personal site from scratch instead of using a template. The goal was to actually learn the stack rather than just ship something.\n\nThe App Router in Next.js 15 is a big shift from the old Pages Router. Everything is a server component by default, and you opt into client-side behavior with 'use client'. It sounds simple but it changes how you think about data fetching and interactivity.\n\nThe biggest surprise was how easy it is to read files on the server — just import `fs` and `path`. No API routes needed for static content. That's how this blog's JSON system works.\n\nIf I were starting over, I'd spend more time upfront planning which components need to be client vs. server. It saves a lot of refactoring later."
-}

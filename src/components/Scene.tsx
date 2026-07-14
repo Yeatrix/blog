@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 // Paths to your models (put the files in public/models/).
@@ -12,11 +11,10 @@ const PLAYER_MODEL_URL: string | null = '/models/player.gltf';
 const PLAYER_SIZE = 1.5; // desired height of the model in world units
 
 // Procedural anime grass (no model files)
-const GRASS_RADIUS = 60;     // how far the grass field extends from the center
+const GRASS_RADIUS = 40;     // how far the grass field extends from the center
 const PLAY_RADIUS = 30;      // how far the player can walk from the center
 const GRASS_COUNT = 150000;   // number of blades (one draw call regardless)
 const GRASS_HEIGHT = 1.0;    // average blade height in world units
-const COLOR_GROUND = 0x2a5c1b; // soil/ground plane under the blades
 const COLOR_BLADE_BASE = 0x2d6a1e; // blade color at the root
 const COLOR_BLADE_TIP = 0x8fd94e;  // blade color at the tip (the anime "glow")
 
@@ -57,11 +55,6 @@ export default function Scene({ onFirstMove }: { onFirstMove?: () => void }) {
     // near→far is the fade band: keep it wide so the fog feels like
     // atmosphere, not a wall. far must stay ≤ (GRASS_RADIUS - PLAY_RADIUS + DIST_MAX)
     scene.fog = new THREE.Fog(0x000000, 14, 40);
-
-    // Environment map: PBR materials (metallic/rough surfaces in GLB models)
-    // reflect their surroundings — without this they render dark grey.
-    // const pmrem = new THREE.PMREMGenerator(renderer);
-    // scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
     const camera = new THREE.PerspectiveCamera(
       60,

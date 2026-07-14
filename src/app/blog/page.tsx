@@ -1,20 +1,28 @@
 import { getAllBlogs } from '@/lib/blogs';
-import BlogCarousel from '@/components/BlogCarousel';
-import { Playfair_Display } from 'next/font/google';
+import BlogGrid from '@/components/BlogGrid';
+import { Patrick_Hand } from 'next/font/google';
 
-const playfair = Playfair_Display({ subsets: ['latin'], weight: ['400', '700'] });
+// same hand-printed style as the diary pages
+const hand = Patrick_Hand({ subsets: ['latin'], weight: '400' });
 
 export default function BlogPage() {
   const blogs = getAllBlogs();
 
   return (
-    <main className="flex flex-col px-6 pt-14 pb-6" style={{ height: 'calc(100vh - 4rem)' }}>
-      <h1 className={`${playfair.className} text-5xl font-bold text-cream text-center mb-10 flex-shrink-0`}>
-        junk and trash
-      </h1>
-      <div className="flex-1 overflow-y-auto blog-scroll">
-        <BlogCarousel blogs={blogs} />
-      </div>
+    <main className={`${hand.className} mx-auto max-w-6xl px-6 pt-10 pb-24`}>
+      <header className="mb-10 flex items-end justify-between border-b border-cream/10 pb-8">
+        <div>
+          <p className="text-base uppercase tracking-[0.2em] text-cream/50 mb-3">
+            The Journal
+          </p>
+          <h1 className="text-6xl text-cream">things i want, learnt, cherish</h1>
+        </div>
+        <p className="text-cream/40 text-lg pb-1">
+          {blogs.length} {blogs.length === 1 ? 'entry' : 'entries'}
+        </p>
+      </header>
+
+      <BlogGrid blogs={blogs} />
     </main>
   );
 }

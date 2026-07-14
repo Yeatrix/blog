@@ -18,7 +18,7 @@ export default function Navbar() {
         <div className="flex items-center gap-6">
           <a href="https://github.com/Yeatrix" target="_blank" rel="noreferrer" className={linkStyle}>GitHub</a>
           <a href="https://www.linkedin.com/in/lakshya-kumar-5a205a258/" target="_blank" rel="noreferrer" className={linkStyle}>Lin</a>
-          <Link href="/contact" className={linkStyle}>Contact</Link>
+          <a href="https://www.instagram.com/lxshayyy" target="_blank" rel="noreferrer" className={linkStyle}>Insta</a>
         </div>
       </nav>
     </header>
