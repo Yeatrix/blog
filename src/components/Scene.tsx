@@ -7,7 +7,8 @@ import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLigh
 
 // Paths to your models (put the files in public/models/).
 // Set to null to use the plain cube / dark plane instead.
-const PLAYER_MODEL_URL: string | null = '/models/player.gltf';
+// no player model yet — the cube is the player; set a path here when you add one
+const PLAYER_MODEL_URL: string | null = null;
 const PLAYER_SIZE = 1.5; // desired height of the model in world units
 
 // Procedural anime grass (no model files)

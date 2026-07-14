@@ -9,21 +9,6 @@
   background-size: 40px 40px;
 }
 
-/* Blog scroll container — thin styled scrollbar */
-.blog-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.blog-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.blog-scroll::-webkit-scrollbar-thumb {
-  background: rgba(108, 88, 76, 0.3);
-  border-radius: 99px;
-}
-.blog-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(108, 88, 76, 0.55);
-}
-
 /* TiltedCard */
 .tilted-card-figure {
   position: relative;
