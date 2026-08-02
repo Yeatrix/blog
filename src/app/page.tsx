@@ -26,11 +26,6 @@ export default function HomePage() {
           moved ? 'opacity-0' : 'opacity-100'
         }`}
       >
-        {/* asterisk mark — top center */}
-        <div className="absolute top-7 left-1/2 -translate-x-1/2 text-cream text-4xl font-light select-none">
-          ✳
-        </div>
-
         {/* edition credit — left edge, mid height */}
         <p className="absolute left-6 top-1/2 -translate-y-1/2 text-cream/80 text-[11px] tracking-[0.08em]">
           roadtodev edition
